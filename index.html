@@ -68,12 +68,28 @@
                 选择Excel文件
             </label>
             <input type="file" id="file-input" accept=".xlsx, .xls" class="hidden">
+
+            <!-- 新增：操作指南 -->
+            <div class="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg text-left">
+                <h3 class="font-bold text-blue-800 mb-2 flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
+                    如何从微信导入文件？
+                </h3>
+                <p class="text-sm text-blue-700 mb-2">由于浏览器安全限制，您需要先将文件保存到手机，再通过本页面选择。</p>
+                <ol class="text-sm text-blue-700 list-decimal list-inside space-y-1">
+                    <li>在微信中找到Excel文件，点击预览。</li>
+                    <li>点击右上角 <strong>...</strong>，选择 <strong>“用其他应用打开”</strong>。</li>
+                    <li>在应用列表中找到并选择 <strong>“存储到文件”</strong>。</li>
+                    <li>返回本页面，点击上方按钮，从手机文件中选择刚刚保存的Excel文件。</li>
+                </ol>
+            </div>
         </section>
 
         <!-- 考试区域 -->
         <section id="quiz-section" class="hidden">
             <div class="mb-6 flex justify-between items-center">
                 <span id="question-counter" class="text-sm font-medium text-gray-500">题目 1 / 20</span>
+                <!-- 优化: 让得分显示更醒目 -->
                 <span id="score-display" class="text-lg font-bold text-white bg-indigo-600 px-4 py-1 rounded-full shadow-lg">得分: 0</span>
             </div>
             <div class="mb-6">
@@ -93,6 +109,7 @@
         <!-- 结果区域 -->
         <section id="result-section" class="hidden text-center">
             <h2 class="text-3xl font-bold text-gray-800 mb-4">🎉 考试结束！</h2>
+            <!-- 优化: 让最终得分更突出 -->
             <div class="bg-gray-100 rounded-lg p-6 mb-6">
                 <p id="final-score" class="text-2xl font-bold text-gray-700"></p>
             </div>
@@ -295,7 +312,7 @@
 
             // --- 鼓励提示功能 ---
             const showCorrectAnswerEncouragement = () => {
-                const randomIndex = Math.floor(Math.random() * correctAnswers.length);
+                const randomIndex = Math。floor(Math。random() * correctAnswers.length);
                 const message = correctAnswers[randomIndex];
                 showToast(message);
             };
@@ -305,9 +322,9 @@
                 let encouragements;
                 
                 if (percentage >= 90) {
-                    encouragements = finalEncouragements.high;
+                    encouragements = finalEncouragements。high;
                 } else if (percentage >= 60) {
-                    encouragements = finalEncouragements.medium;
+                    encouragements = finalEncouragements。medium;
                 } else {
                     encouragements = finalEncouragements.low;
                 }
@@ -322,10 +339,10 @@
             };
 
             const showToast = (message) => {
-                encouragementText.textContent = message;
+                encouragementText。textContent = message;
                 
                 // 显示提示
-                encouragementToast.classList.add('show');
+                encouragementToast。classList.add('show');
 
                 // 3秒后隐藏
                 setTimeout(() => {
