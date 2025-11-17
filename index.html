@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单词考试模式</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS (xlsx) CDN for Reading Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        /* 选项按钮的过渡效果 */
+        .option-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .option-btn:hover:not(.disabled) {
+            transform: translateX(5px);
+        }
+        /* 禁用点击后的样式 */
+        .disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        /* 正确答案高亮 */
+        .correct {
+            background-color: #10b981; /* green-500 */
+            color: white;
+            border-color: #10b981;
+        }
+        /* 错误答案高亮 */
+        .incorrect {
+            background-color: #ef4444; /* red-500 */
+            color: white;
+            border-color: #ef4444;
+        }
+        /* 鼓励提示的样式 */
+        #encouragement-toast {
+            transform: translateX(-50%) translateY(-100px);
+            opacity: 0;
+            transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+        #encouragement-toast.show {
+            transform: translateX(-50%) translateY(20px);
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-50 to-pink-100 min-h-screen flex items-center justify-center p-4">
+    <!-- 鼓励提示容器 -->
+    <div id="encouragement-toast" class="fixed top-4 left-1/2 z-50 bg-green-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg">
+        <span id="encouragement-text"></span>
+    </div>
+
+    <div class="container mx-auto max-w-2xl bg-white rounded-lg shadow-xl p-6 sm:p-8">
+
+        <!-- 文件上传区域 -->
+        <section id="upload-section" class="text-center">
+            <h1 class="text-3xl font-bold text-gray-800 mb-4">🧠 单词考试模式</h1>
+            <p class="text-gray-600 mb-6">请选择您从记录本导出的Excel文件来开始考试</p>
+            <label for="file-input" class="bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-300 cursor-pointer">
+                选择Excel文件
+            </label>
+            <input type="file" id="file-input" accept=".xlsx, .xls" class="hidden">
+        </section>
+
+        <!-- 考试区域 -->
+        <section id="quiz-section" class="hidden">
+            <div class="mb-6 flex justify-between items-center">
+                <span id="question-counter" class="text-sm font-medium text-gray-500">题目 1 / 20</span>
+                <span id="score-display" class="text-lg font-bold text-white bg-indigo-600 px-4 py-1 rounded-full shadow-lg">得分: 0</span>
+            </div>
+            <div class="mb-6">
+                <h2 id="question-word" class="text-2xl font-bold text-center text-gray-800"></h2>
+            </div>
+            <div id="options-container" class="space-y-3">
+                <!-- 选项将在这里动态生成 -->
+            </div>
+            <div class="mt-6 text-center">
+                <p id="feedback" class="font-semibold mb-4 text-lg"></p>
+                <button id="next-btn" class="bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition duration-300 hidden">
+                    下一题
+                </button>
+            </div>
+        </section>
+
+        <!-- 结果区域 -->
+        <section id="result-section" class="hidden text-center">
+            <h2 class="text-3xl font-bold text-gray-800 mb-4">🎉 考试结束！</h2>
+            <div class="bg-gray-100 rounded-lg p-6 mb-6">
+                <p id="final-score" class="text-2xl font-bold text-gray-700"></p>
+            </div>
+            <button id="restart-btn" class="bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition duration-300">
+                重新开始
+            </button>
+        </section>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('file-input');
+            const uploadSection = document.getElementById('upload-section');
+            const quizSection = document.getElementById('quiz-section');
+            const resultSection = document.getElementById('result-section');
+            const questionCounter = document.getElementById('question-counter');
+            const scoreDisplay = document.getElementById('score-display');
+            const questionWord = document.getElementById('question-word');
+            const optionsContainer = document.getElementById('options-container');
+            const feedback = document.getElementById('feedback');
+            const nextBtn = document.getElementById('next-btn');
+            const finalScore = document.getElementById('final-score');
+            const restartBtn = document.getElementById('restart-btn');
+            const encouragementToast = document.getElementById('encouragement-toast');
+            const encouragementText = document.getElementById('encouragement-text');
+
+            let allWords = [];
+            let currentQuestionIndex = 0;
+            let score = 0;
+
+            // --- 鼓励语句库 ---
+            const correctAnswers = [
+                "答对了！太棒了！",
+                "正确！你真是个天才！",
+                "没错！继续保持！",
+                "Excellent! 完美！",
+                "就是这么简单！"
+            ];
+
+            const finalEncouragements = {
+                high: [
+                    "🏆 卓越！你对这些单词的掌握已经炉火纯青！",
+                    "🌟 完美！你是真正的单词大师！",
+                    "🎯 惊艳！这个分数证明了你的努力和天赋！"
+                ],
+                medium: [
+                    "👍 做得很好！你已经掌握了大部分内容！",
+                    "💪 不错！再接再厉，你离满分不远了！",
+                    "👏 值得称赞！你的努力得到了回报！"
+                ],
+                low: [
+                    "💡 加油！学习是一个过程，每次练习都是进步！",
+                    "🌱 别灰心！罗马不是一天建成的，继续努力！",
+                    "📚 不错的开始！找出薄弱环节，下次会更好！"
+                ]
+            };
+
+            // --- 事件监听 ---
+            fileInput.addEventListener('change', handleFileUpload);
+            nextBtn.addEventListener('click', displayNextQuestion);
+            restartBtn.addEventListener('click', resetQuiz);
+
+            // --- 核心功能 ---
+            function handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                        // 过滤掉没有释义的单词
+                        allWords = jsonData.filter(row => row.释义 && row.释义.trim() !== '');
+                        
+                        if (allWords.length < 4) {
+                            alert('单词数量太少，无法生成有效的考题，请至少包含4个有释义的单词。');
+                            return;
+                        }
+
+                        startQuiz();
+                    } catch (error) {
+                        alert('文件读取失败，请确保您选择了正确的Excel文件。');
+                        console.error(error);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            }
+
+            function startQuiz() {
+                currentQuestionIndex = 0;
+                score = 0;
+                // 随机打乱题目顺序
+                allWords.sort(() => Math.random() - 0.5);
+                
+                uploadSection.classList.add('hidden');
+                quizSection.classList.remove('hidden');
+                resultSection.classList.add('hidden');
+
+                displayQuestion();
+            }
+
+            function displayQuestion() {
+                if (currentQuestionIndex >= allWords.length) {
+                    showResults();
+                    return;
+                }
+
+                const currentWord = allWords[currentQuestionIndex];
+                questionWord.textContent = currentWord.单词;
+                questionCounter.textContent = `题目 ${currentQuestionIndex + 1} / ${allWords.length}`;
+                scoreDisplay.textContent = `得分: ${score}`;
+                
+                feedback.textContent = '';
+                nextBtn.classList.add('hidden');
+                
+                generateOptions(currentWord);
+            }
+
+            function generateOptions(currentWord) {
+                optionsContainer.innerHTML = '';
+                const correctAnswer = currentWord.释义;
+                const options = [correctAnswer];
+
+                // 从其他单词中随机挑选3个作为错误选项
+                while (options.length < 4) {
+                    const randomWord = allWords[Math.floor(Math.random() * allWords.length)];
+                    if (randomWord.释义 && !options.includes(randomWord.释义)) {
+                        options.push(randomWord.释义);
+                    }
+                }
+
+                // 随机打乱选项顺序
+                options.sort(() => Math.random() - 0.5);
+
+                options.forEach(option => {
+                    const button = document.createElement('button');
+                    button.textContent = option;
+                    button.className = 'option-btn w-full text-left p-4 border-2 border-gray-300 rounded-lg hover:border-indigo-500 focus:outline-none';
+                    button.onclick = () => selectAnswer(button, option === correctAnswer);
+                    optionsContainer.appendChild(button);
+                });
+            }
+
+            function selectAnswer(buttonElement, isCorrect) {
+                // 禁用所有按钮
+                const allButtons = optionsContainer.querySelectorAll('.option-btn');
+                allButtons.forEach(btn => {
+                    btn.onclick = null;
+                    btn.classList.add('disabled');
+                });
+
+                if (isCorrect) {
+                    buttonElement.classList.add('correct');
+                    feedback.textContent = '✅ 正确！';
+                    feedback.className = 'font-semibold mb-4 text-lg text-green-600';
+                    score++;
+                    // --- 显示答对鼓励 ---
+                    showCorrectAnswerEncouragement();
+                } else {
+                    buttonElement.classList.add('incorrect');
+                    feedback.textContent = '❌ 错误！';
+                    feedback.className = 'font-semibold mb-4 text-lg text-red-600';
+                    // 高亮正确答案
+                    allButtons.forEach(btn => {
+                        if (btn.textContent === allWords[currentQuestionIndex].释义) {
+                            btn.classList.add('correct');
+                        }
+                    });
+                }
+                
+                scoreDisplay.textContent = `得分: ${score}`;
+                nextBtn.classList.remove('hidden');
+            }
+
+            function displayNextQuestion() {
+                currentQuestionIndex++;
+                displayQuestion();
+            }
+
+            function showResults() {
+                quizSection.classList.add('hidden');
+                resultSection.classList.remove('hidden');
+                const percentage = Math.round(score / allWords.length * 100);
+                finalScore.innerHTML = `您的最终得分是 <span class="text-3xl text-indigo-600">${score}</span> / ${allWords.length} <br> <span class="text-xl">正确率: ${percentage}%</span>`;
+                
+                // --- 显示最终鼓励 ---
+                showFinalEncouragement(percentage);
+            }
+
+            function resetQuiz() {
+                resultSection.classList.add('hidden');
+                uploadSection.classList.remove('hidden');
+                fileInput.value = ''; // 清空文件输入，允许重新选择同一文件
+            }
+
+            // --- 鼓励提示功能 ---
+            const showCorrectAnswerEncouragement = () => {
+                const randomIndex = Math.floor(Math.random() * correctAnswers.length);
+                const message = correctAnswers[randomIndex];
+                showToast(message);
+            };
+
+            const showFinalEncouragement = (percentage) => {
+                let message;
+                let encouragements;
+                
+                if (percentage >= 90) {
+                    encouragements = finalEncouragements.high;
+                } else if (percentage >= 60) {
+                    encouragements = finalEncouragements.medium;
+                } else {
+                    encouragements = finalEncouragements.low;
+                }
+
+                const randomIndex = Math.floor(Math.random() * encouragements.length);
+                message = encouragements[randomIndex];
+                
+                // 延迟显示，让用户先看到分数
+                setTimeout(() => {
+                    showToast(message);
+                }, 500);
+            };
+
+            const showToast = (message) => {
+                encouragementText.textContent = message;
+                
+                // 显示提示
+                encouragementToast.classList.add('show');
+
+                // 3秒后隐藏
+                setTimeout(() => {
+                    encouragementToast.classList.remove('show');
+                }, 3000);
+            };
+        });
+    </script>
+</body>
+</html>
